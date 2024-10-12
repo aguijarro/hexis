@@ -200,13 +200,25 @@ class _HomePageState extends State<HomePage> {
         child: Row(
           children: [
             Expanded(
-              flex: 2,
+              flex: 1,
               child: _buildConversationArea(),
             ),
             SizedBox(width: 16),
             Expanded(
               flex: 1,
-              child: _buildSystemsMapArea(),
+              child: Column(
+                children: [
+                  Expanded(
+                    flex: 1,
+                    child: _buildUploadDocumentsArea(),
+                  ),
+                  SizedBox(height: 16),
+                  Expanded(
+                    flex: 2,
+                    child: _buildSystemsMapArea(),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -294,6 +306,59 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildUploadDocumentsArea() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.5),
+            spreadRadius: 2,
+            blurRadius: 5,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Upload Documents',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: _uploadDocument,
+              child: Text('Upload Document'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color.fromARGB(255, 185, 222, 252),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              ),
+            ),
+            SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _uploadedDocuments.length,
+                itemBuilder: (context, index) {
+                  return ListTile(
+                    leading: Icon(Icons.description),
+                    title: Text(_uploadedDocuments[index]),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSystemsMapArea() {
     return Container(
       decoration: BoxDecoration(
@@ -313,33 +378,12 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ElevatedButton(
-              onPressed: _uploadDocument,
-              child: Text('Upload Document'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color.fromARGB(255, 185, 222, 252),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              ),
+            Text(
+              'Systems Map',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 16),
+            SizedBox(height: 8),
             Expanded(
-              flex: 1,
-              child: ListView.builder(
-                itemCount: _uploadedDocuments.length,
-                itemBuilder: (context, index) {
-                  return ListTile(
-                    leading: Icon(Icons.description),
-                    title: Text(_uploadedDocuments[index]),
-                  );
-                },
-              ),
-            ),
-            SizedBox(height: 16),
-            Expanded(
-              flex: 2,
               child: Container(
                 decoration: BoxDecoration(
                   color: Colors.grey[200],
@@ -348,28 +392,35 @@ class _HomePageState extends State<HomePage> {
                 child: _systemsMapUrl != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(10),
-                        child: Image.network(
-                          _systemsMapUrl!,
-                          fit: BoxFit.contain,
-                          loadingBuilder: (BuildContext context, Widget child,
-                              ImageChunkEvent? loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Center(
-                              child: CircularProgressIndicator(
-                                value: loadingProgress.expectedTotalBytes !=
-                                        null
-                                    ? loadingProgress.cumulativeBytesLoaded /
-                                        loadingProgress.expectedTotalBytes!
-                                    : null,
-                              ),
-                            );
-                          },
-                          errorBuilder: (BuildContext context, Object exception,
-                              StackTrace? stackTrace) {
-                            return Center(
-                                child: Text('Error loading image: $exception'));
-                          },
-                        ))
+                        child: InteractiveViewer(
+                          boundaryMargin: EdgeInsets.all(20),
+                          minScale: 0.5,
+                          maxScale: 3,
+                          child: Image.network(
+                            _systemsMapUrl!,
+                            fit: BoxFit.contain,
+                            loadingBuilder: (BuildContext context, Widget child,
+                                ImageChunkEvent? loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Center(
+                                child: CircularProgressIndicator(
+                                  value: loadingProgress.expectedTotalBytes !=
+                                          null
+                                      ? loadingProgress.cumulativeBytesLoaded /
+                                          loadingProgress.expectedTotalBytes!
+                                      : null,
+                                ),
+                              );
+                            },
+                            errorBuilder: (BuildContext context,
+                                Object exception, StackTrace? stackTrace) {
+                              return Center(
+                                  child:
+                                      Text('Error loading image: $exception'));
+                            },
+                          ),
+                        ),
+                      )
                     : Center(child: Text('No systems map available')),
               ),
             ),
