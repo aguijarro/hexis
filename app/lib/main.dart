@@ -32,11 +32,18 @@ class _HomePageState extends State<HomePage> {
   List<Map<String, dynamic>> _conversation = [];
   String? _conversationId;
   String? _systemsMapUrl;
+  final FocusNode _questionFocusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
     _startConversation();
+  }
+
+  @override
+  void dispose() {
+    _questionFocusNode.dispose();
+    super.dispose();
   }
 
   Future<void> _startConversation() async {
@@ -86,6 +93,8 @@ class _HomePageState extends State<HomePage> {
           _analysis = result['analysis'];
           _conversation =
               List<Map<String, dynamic>>.from(result['conversation']);
+          // Clear the text input
+          _questionController.clear();
         });
 
         await _generateSystemsMap();
@@ -179,69 +188,175 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Systems Thinking Assistant'),
+        backgroundColor: Colors.blueGrey[800],
       ),
-      body: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: _conversation.length,
-                      itemBuilder: (context, index) {
-                        final message = _conversation[index];
-                        return ListTile(
-                          title: Text(message['content'].toString()),
-                          leading: Icon(
-                            message['role'] == 'user'
-                                ? Icons.person
-                                : Icons.android,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  TextField(
-                    controller: _questionController,
-                    decoration: InputDecoration(
-                      hintText: 'Enter your question',
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _analyzeQuestion,
-                    child: Text('Analyze'),
-                  ),
-                ],
-              ),
+      backgroundColor: Colors.blueGrey[100],
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: _buildConversationArea(),
             ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ElevatedButton(
-                    onPressed: _uploadDocument,
-                    child: Text('Upload Document'),
-                  ),
-                  SizedBox(height: 16),
-                  Expanded(
-                    child: _systemsMapUrl != null
-                        ? Image.network(_systemsMapUrl!)
-                        : Center(child: Text('No systems map available')),
-                  ),
-                ],
-              ),
+            SizedBox(width: 16),
+            Expanded(
+              flex: 1,
+              child: _buildSystemsMapArea(),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConversationArea() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.5),
+            spreadRadius: 2,
+            blurRadius: 5,
+            offset: Offset(0, 3),
           ),
         ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: ListView.builder(
+                itemCount: _conversation.length,
+                itemBuilder: (context, index) {
+                  final message = _conversation[index];
+                  return Card(
+                    color: message['role'] == 'user'
+                        ? Colors.blue[50]
+                        : Colors.green[50],
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: ListTile(
+                      title: Text(message['content'].toString()),
+                      leading: Icon(
+                        message['role'] == 'user'
+                            ? Icons.person
+                            : Icons.android,
+                        color: message['role'] == 'user'
+                            ? Colors.blue
+                            : Colors.green,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            SizedBox(height: 16),
+            TextField(
+              controller: _questionController,
+              focusNode: _questionFocusNode,
+              decoration: InputDecoration(
+                hintText: 'Enter your question',
+                filled: true,
+                fillColor: Colors.grey[200],
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _isLoading ? null : _analyzeQuestion,
+              child: _isLoading
+                  ? CircularProgressIndicator(color: Colors.white)
+                  : Text('Analyze'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color.fromARGB(255, 185, 222, 252),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSystemsMapArea() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.5),
+            spreadRadius: 2,
+            blurRadius: 5,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ElevatedButton(
+              onPressed: _uploadDocument,
+              child: Text('Upload Document'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color.fromARGB(255, 170, 199, 171),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              ),
+            ),
+            SizedBox(height: 16),
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: _systemsMapUrl != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.network(
+                          _systemsMapUrl!,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (BuildContext context, Widget child,
+                              ImageChunkEvent? loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Center(
+                              child: CircularProgressIndicator(
+                                value: loadingProgress.expectedTotalBytes !=
+                                        null
+                                    ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                    : null,
+                              ),
+                            );
+                          },
+                          errorBuilder: (BuildContext context, Object exception,
+                              StackTrace? stackTrace) {
+                            return Center(
+                                child: Text('Error loading image: $exception'));
+                          },
+                        ))
+                    : Center(child: Text('No systems map available')),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
