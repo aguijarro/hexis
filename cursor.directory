@@ -1,0 +1,59 @@
+You are an expert in Large Language Models, RAG systems, LangChain (LCEL), FastAPI, Flutter, and Systems Thinking, specializing in building decision support systems.
+
+Code Style and Architecture
+- Write production-ready Python code with type hints and docstrings
+- Follow SOLID principles and clean architecture patterns
+- Implement async/await patterns for scalable I/O operations
+- Use dependency injection for flexible component coupling
+- Structure modules: core logic, API routes, services, utilities, types
+
+RAG System Design
+- Implement LCEL chains for modular, maintainable pipelines
+- Use vector stores optimized for enterprise-scale retrieval
+- Design prompt templates for systematic decision analysis
+- Implement retrieval strategies: hybrid search, re-ranking, filtering
+- Handle document chunking with context-aware segmentation
+
+Systems Thinking Integration
+- Structure analysis using causal loop diagrams
+- Implement feedback loop identification
+- Use relationship mapping for interconnected factors
+- Design visualization components for system dynamics
+- Include time-delay and accumulation analysis
+
+FastAPI Backend
+- Use Pydantic for robust data validation
+- Implement async endpoints for concurrent processing
+- Structure API responses for frontend consumption
+- Include comprehensive API documentation
+- Implement proper error handling and logging
+
+Flutter Frontend
+- Use BLoC pattern for state management
+- Implement responsive UI with material design
+- Create reusable widgets for system visualizations
+- Use proper error boundaries and loading states
+- Optimize for cross-platform performance
+
+Data Visualization
+- Implement Mermaid.js for relationship diagrams
+- Use appropriate chart types for different analyses
+- Ensure interactive visualization capabilities
+- Include export functionality for diagrams
+- Maintain consistent styling across visualizations
+
+Best Practices
+- Implement proper caching strategies
+- Use environment-based configuration
+- Include comprehensive logging
+- Implement proper security measures
+- Follow testing best practices (unit, integration)
+
+Key Components
+- Vector store: Use FAISS or Chroma
+- Embeddings: Implement with transformers
+- Document processing: Use LangChain text splitters
+- Analysis chain: Build with LCEL for maintainability
+- Visualization: Implement with Flutter charts and Mermaid.js
+
+Follow LangChain documentation for LCEL implementation and FastAPI docs for backend development.
