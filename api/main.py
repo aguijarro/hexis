@@ -71,12 +71,11 @@ def get_llm(settings: Settings = Depends(get_settings)):
         openai_api_key=settings.openai_api_key
     )
 
-# Systems thinking prompt template
-SYSTEMS_THINKING_TEMPLATE = """
-Analyze the following business question using systems thinking approach:
-Question: {question}
+# Consolidated template
+ANALYSIS_TEMPLATE = """
+Analyze the following business question or context using a systems thinking approach:
 
-Context: {context}
+Question/Context: {question_or_context}
 
 Consider the following aspects:
 1. Identify key elements and their relationships
@@ -89,10 +88,6 @@ Provide a structured analysis with clear recommendations.
 Analysis:
 """
 
-systems_thinking_prompt = ChatPromptTemplate.from_messages([
-    SystemMessage(content="You are a systems thinking expert."),
-    HumanMessagePromptTemplate.from_template(SYSTEMS_THINKING_TEMPLATE)
-])
 
 def get_qa_chain(
     vector_store: Chroma = Depends(get_vector_store),
@@ -105,29 +100,20 @@ def get_qa_chain(
     )
     
     prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content="You are a helpful AI assistant."),
-        HumanMessagePromptTemplate.from_template("""
-        Use the following pieces of context to answer the question at the end. 
-        If you don't know the answer, just say that you don't know, don't try to make up an answer.
-
-        Context: {context}
-        
-        Chat History: {chat_history}
-
-        Human: {question}
-        AI Assistant:""")
+        SystemMessage(content="You are a systems thinking expert."),
+        HumanMessagePromptTemplate.from_template(ANALYSIS_TEMPLATE)
     ])
     
     retriever = vector_store.as_retriever()
     
     def _retrieve_docs(input_dict):
-        return retriever.get_relevant_documents(input_dict["question"])
+        return retriever.get_relevant_documents(input_dict["question_or_context"])
 
     chain = (
         {
             "context": RunnableLambda(_retrieve_docs),
             "chat_history": lambda x: "\n".join(x["chat_history"]),
-            "question": lambda x: x["question"]
+            "question_or_context": lambda x: x["question_or_context"]
         }
         | prompt
         | llm
@@ -170,7 +156,7 @@ async def analyze_question(
         conversation.messages.append({"role": "user", "content": question.query})
         
         result = qa_chain.invoke({
-            "question": question.query,
+            "question_or_context": question.query,  # Changed from "question" to "question_or_context"
             "chat_history": [f"{m['role']}: {m['content']}" for m in conversation.messages[:-1]]
         })
         
@@ -183,6 +169,7 @@ async def analyze_question(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/upload-document")
+# Todo: Improve to not save data when the file is the same
 async def upload_document(
     file: UploadFile = File(...),
     vector_store: Chroma = Depends(get_vector_store)
