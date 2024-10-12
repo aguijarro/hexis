@@ -33,6 +33,7 @@ class _HomePageState extends State<HomePage> {
   String? _conversationId;
   String? _systemsMapUrl;
   final FocusNode _questionFocusNode = FocusNode();
+  List<String> _uploadedDocuments = [];
 
   @override
   void initState() {
@@ -132,6 +133,9 @@ class _HomePageState extends State<HomePage> {
           final response = await request.send();
 
           if (response.statusCode == 200) {
+            setState(() {
+              _uploadedDocuments.add(file.name);
+            });
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('Document uploaded successfully')),
             );
@@ -313,7 +317,7 @@ class _HomePageState extends State<HomePage> {
               onPressed: _uploadDocument,
               child: Text('Upload Document'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color.fromARGB(255, 170, 199, 171),
+                backgroundColor: const Color.fromARGB(255, 185, 222, 252),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -322,6 +326,20 @@ class _HomePageState extends State<HomePage> {
             ),
             SizedBox(height: 16),
             Expanded(
+              flex: 1,
+              child: ListView.builder(
+                itemCount: _uploadedDocuments.length,
+                itemBuilder: (context, index) {
+                  return ListTile(
+                    leading: Icon(Icons.description),
+                    title: Text(_uploadedDocuments[index]),
+                  );
+                },
+              ),
+            ),
+            SizedBox(height: 16),
+            Expanded(
+              flex: 2,
               child: Container(
                 decoration: BoxDecoration(
                   color: Colors.grey[200],
