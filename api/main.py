@@ -152,16 +152,16 @@ async def analyze_question(
         
         conversation = conversations[question.conversation_id]
         
-        conversation.messages.append({"role": "user", "content": question.query})
-        
-        # Retrieve relevant documents from the vector store
+        # Retrieve relevant documents from the vector store for each question
         relevant_docs = vector_store.similarity_search(question.query, k=5)
         context = "\n".join([doc.page_content for doc in relevant_docs])
+        
+        conversation.messages.append({"role": "user", "content": question.query})
         
         result = qa_chain.invoke({
             "question_or_context": question.query,
             "chat_history": [f"{m['role']}: {m['content']}" for m in conversation.messages[:-1]],
-            "context": context
+            "context": context  # Pass the newly retrieved context
         })
         
         conversation.messages.append({"role": "assistant", "content": result})
