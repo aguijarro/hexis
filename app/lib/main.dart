@@ -15,7 +15,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Systems Thinking Assistant',
+      title: 'Strategic Decision-Maker agent',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
@@ -211,7 +211,10 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Systems Thinking Assistant'),
+        title: Text(
+          'Strategic Decision-Maker agent',
+          style: TextStyle(color: Colors.white), // Changed to white
+        ),
         backgroundColor: Colors.blueGrey[800],
       ),
       backgroundColor: Colors.blueGrey[100],
