@@ -105,7 +105,8 @@ class _HomePageState extends State<HomePage> {
           _questionController.clear();
         });
 
-        await _generateSystemsMap();
+        // Remove the call to _generateSystemsMap()
+        // await _generateSystemsMap();
       } else {
         throw Exception('Failed to analyze question: ${response.statusCode}');
       }

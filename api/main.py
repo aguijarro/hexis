@@ -77,23 +77,6 @@ def get_llm(settings: Settings = Depends(get_settings)):
         openai_api_key=settings.openai_api_key
     )
 
-# Consolidated template
-ANALYSIS_TEMPLATE = """
-Analyze the following business question or context using a systems thinking approach:
-
-Question/Context: {question_or_context}
-
-Consider the following aspects:
-1. Identify key elements and their relationships
-2. Analyze feedback loops and causality
-3. Consider short-term and long-term implications
-4. Identify leverage points for intervention
-
-Provide a structured analysis with clear recommendations.
-
-Analysis:
-"""
-
 
 def get_qa_chain(
     vector_store: Chroma = Depends(get_vector_store),
@@ -171,7 +154,7 @@ async def analyze_question(
         conversation.messages.append({"role": "user", "content": question.query})
         
         result = qa_chain.invoke({
-            "question_or_context": question.query,  # Changed from "question" to "question_or_context"
+            "question_or_context": question.query,
             "chat_history": [f"{m['role']}: {m['content']}" for m in conversation.messages[:-1]]
         })
         
