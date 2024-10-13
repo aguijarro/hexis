@@ -276,28 +276,35 @@ def generate_systems_map(analysis: SystemsAnalysis):
     
     return plot_base64
 
-@app.post("/upload-document")
-async def upload_document(
-    file: UploadFile = File(...),
+@app.post("/upload-documents")
+async def upload_documents(
+    files: List[UploadFile] = File(...),
     vector_store: Chroma = Depends(get_vector_store),
     systems_analysis_chain = Depends(get_systems_analysis_chain)
 ):
     try:
-        logger.info(f"Uploading document: {file.filename}")
-        content = await file.read()
-        file_content = content.decode()
+        uploaded_files = []
+        combined_content = ""
+        
+        for file in files:
+            logger.info(f"Uploading document: {file.filename}")
+            content = await file.read()
+            file_content = content.decode()
+            
+            # Process and store in Chroma
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=1000,
+                chunk_overlap=200
+            )
+            texts = text_splitter.split_text(file_content)
+            vector_store.add_texts(texts)
+            
+            combined_content += file_content + "\n\n"
+            uploaded_files.append(file.filename)
 
-        # Process and store in Chroma
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200
-        )
-        texts = text_splitter.split_text(file_content)
-        vector_store.add_texts(texts)
-
-        # Analyze the content using the systems analysis chain
+        # Analyze the combined content using the systems analysis chain
         try:
-            analysis = systems_analysis_chain.invoke(file_content)
+            analysis = systems_analysis_chain.invoke(combined_content)
         except Exception as e:
             logger.error(f"Error in systems analysis: {str(e)}")
             # Provide a default analysis if the chain fails
@@ -310,16 +317,17 @@ async def upload_document(
             logger.error(f"Error generating systems map: {str(e)}")
             systems_map = "http://localhost:8000/default-systems-map.png"  # Provide a default image URL
         
-        file_id = str(uuid.uuid4())
+        upload_id = str(uuid.uuid4())
 
-        logger.info("Document processed successfully")
+        logger.info("Documents processed successfully")
         return JSONResponse({
-            "message": "Document processed successfully",
-            "file_id": file_id,
+            "message": "Documents processed successfully",
+            "upload_id": upload_id,
+            "uploaded_files": uploaded_files,
             "systems_map": systems_map
         })
     except Exception as e:
-        logger.error(f"Error in upload_document: {str(e)}", exc_info=True)
+        logger.error(f"Error in upload_documents: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.route("/systems-map", methods=["POST", "GET"])

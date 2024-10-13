@@ -41,6 +41,8 @@ class _HomePageState extends State<HomePage> {
   final TransformationController _transformationController =
       TransformationController();
   double _currentScale = 1.0;
+  bool _isUploadingDocuments = false;
+  bool _isAnalyzing = false;
 
   @override
   void initState() {
@@ -76,8 +78,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _analyzeQuestion() async {
-    setState(() => _isLoading = true);
-
+    setState(() => _isAnalyzing = true);
     try {
       if (_conversationId == null) {
         await _startConversation();
@@ -101,7 +102,6 @@ class _HomePageState extends State<HomePage> {
           _analysis = result['analysis'];
           _conversation =
               List<Map<String, dynamic>>.from(result['conversation']);
-          // Clear the text input
           _questionController.clear();
         });
 
@@ -114,52 +114,59 @@ class _HomePageState extends State<HomePage> {
         SnackBar(content: Text('Error: $e')),
       );
     } finally {
-      setState(() => _isLoading = false);
+      setState(() => _isAnalyzing = false);
     }
   }
 
-  Future<void> _uploadDocument() async {
-    final result = await FilePicker.platform.pickFiles();
+  Future<void> _uploadDocuments() async {
+    final result = await FilePicker.platform.pickFiles(allowMultiple: true);
 
     if (result != null) {
-      final file = result.files.first;
-      final bytes = file.bytes;
+      setState(() => _isUploadingDocuments = true);
 
-      if (bytes != null) {
-        try {
-          final request = http.MultipartRequest(
-            'POST',
-            Uri.parse('http://localhost:8000/upload-document'),
-          );
-          request.files.add(http.MultipartFile.fromBytes(
-            'file',
-            bytes,
-            filename: file.name,
-          ));
+      try {
+        var request = http.MultipartRequest(
+          'POST',
+          Uri.parse('http://localhost:8000/upload-documents'),
+        );
 
-          final response = await request.send();
-
-          if (response.statusCode == 200) {
-            final responseData = await response.stream.bytesToString();
-            final jsonResponse = json.decode(responseData);
-            setState(() {
-              _uploadedDocuments.add(file.name);
-              _systemsMapUrl = jsonResponse['systems_map'];
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  content:
-                      Text('Document uploaded and processed successfully')),
-            );
-          } else {
-            throw Exception(
-                'Failed to upload document: ${response.statusCode}');
+        for (var file in result.files) {
+          final bytes = file.bytes;
+          if (bytes != null) {
+            request.files.add(http.MultipartFile.fromBytes(
+              'files',
+              bytes,
+              filename: file.name,
+            ));
           }
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
-          );
         }
+
+        final response = await request.send();
+
+        if (response.statusCode == 200) {
+          final responseData = await response.stream.bytesToString();
+          final jsonResponse = json.decode(responseData);
+          setState(() {
+            List<String> uploadedFiles =
+                (jsonResponse['uploaded_files'] as List<dynamic>)
+                    .map((file) => file.toString())
+                    .toList();
+            _uploadedDocuments.addAll(uploadedFiles);
+            _systemsMapUrl = jsonResponse['systems_map'];
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Documents uploaded and processed successfully')),
+          );
+        } else {
+          throw Exception('Failed to upload documents: ${response.statusCode}');
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      } finally {
+        setState(() => _isUploadingDocuments = false);
       }
     }
   }
@@ -300,9 +307,15 @@ class _HomePageState extends State<HomePage> {
             ),
             SizedBox(height: 16),
             ElevatedButton(
-              onPressed: _isLoading ? null : _analyzeQuestion,
-              child: _isLoading
-                  ? CircularProgressIndicator(color: Colors.white)
+              onPressed: _isAnalyzing ? null : _analyzeQuestion,
+              child: _isAnalyzing
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
                   : Text('Analyze'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color.fromARGB(255, 185, 222, 252),
@@ -343,8 +356,16 @@ class _HomePageState extends State<HomePage> {
             ),
             SizedBox(height: 8),
             ElevatedButton(
-              onPressed: _uploadDocument,
-              child: Text('Upload Document'),
+              onPressed: _isUploadingDocuments ? null : _uploadDocuments,
+              child: _isUploadingDocuments
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : Text('Upload Documents'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color.fromARGB(255, 185, 222, 252),
                 shape: RoundedRectangleBorder(
