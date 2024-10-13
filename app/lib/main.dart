@@ -3,7 +3,9 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'dart:typed_data';
-import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'package:flutter/services.dart';
+import 'package:universal_html/html.dart' as html;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 void main() {
   runApp(MyApp());
@@ -513,20 +515,42 @@ class _HomePageState extends State<HomePage> {
       }
 
       if (imageBytes != null) {
-        final result = await ImageGallerySaver.saveImage(imageBytes);
-        if (result['isSuccess']) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Image saved to gallery')),
-          );
+        if (kIsWeb) {
+          _saveImageWeb(imageBytes);
         } else {
-          throw Exception('Failed to save image');
+          await _saveImageMobile(imageBytes);
         }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Image prepared for download')),
+        );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error saving image: $e')),
+        SnackBar(content: Text('Error preparing image: $e')),
       );
     }
+  }
+
+  void _saveImageWeb(Uint8List bytes) {
+    final base64 = base64Encode(bytes);
+    final anchor =
+        html.AnchorElement(href: 'data:application/octet-stream;base64,$base64')
+          ..target = 'blank'
+          ..download = 'systems_map.png';
+    html.document.body?.append(anchor);
+    anchor.click();
+    anchor.remove();
+  }
+
+  Future<void> _saveImageMobile(Uint8List bytes) async {
+    final base64 = base64Encode(bytes);
+    final dataUrl = 'data:image/png;base64,$base64';
+    await Clipboard.setData(ClipboardData(text: dataUrl));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+          content: Text(
+              'Image data copied to clipboard. You can paste it in a browser to view/save.')),
+    );
   }
 }
 

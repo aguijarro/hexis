@@ -37,6 +37,7 @@ dependencies:
   http: ^1.2.2
   file_picker: ^8.1.2
   image_gallery_saver: ^1.7.1
+  universal_html: ^2.0.8
 
 dev_dependencies:
   flutter_test:
