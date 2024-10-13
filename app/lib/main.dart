@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
+import 'dart:typed_data';
 
 void main() {
   runApp(MyApp());
@@ -133,11 +134,16 @@ class _HomePageState extends State<HomePage> {
           final response = await request.send();
 
           if (response.statusCode == 200) {
+            final responseData = await response.stream.bytesToString();
+            final jsonResponse = json.decode(responseData);
             setState(() {
               _uploadedDocuments.add(file.name);
+              _systemsMapUrl = jsonResponse['systems_map'];
             });
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Document uploaded successfully')),
+              SnackBar(
+                  content:
+                      Text('Document uploaded and processed successfully')),
             );
           } else {
             throw Exception(
@@ -389,45 +395,60 @@ class _HomePageState extends State<HomePage> {
                   color: Colors.grey[200],
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: _systemsMapUrl != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: InteractiveViewer(
-                          boundaryMargin: EdgeInsets.all(20),
-                          minScale: 0.5,
-                          maxScale: 3,
-                          child: Image.network(
-                            _systemsMapUrl!,
-                            fit: BoxFit.contain,
-                            loadingBuilder: (BuildContext context, Widget child,
-                                ImageChunkEvent? loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Center(
-                                child: CircularProgressIndicator(
-                                  value: loadingProgress.expectedTotalBytes !=
-                                          null
-                                      ? loadingProgress.cumulativeBytesLoaded /
-                                          loadingProgress.expectedTotalBytes!
-                                      : null,
-                                ),
-                              );
-                            },
-                            errorBuilder: (BuildContext context,
-                                Object exception, StackTrace? stackTrace) {
-                              return Center(
-                                  child:
-                                      Text('Error loading image: $exception'));
-                            },
-                          ),
-                        ),
-                      )
-                    : Center(child: Text('No systems map available')),
+                child: _buildSystemsMapContent(),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildSystemsMapContent() {
+    if (_systemsMapUrl == null || _systemsMapUrl!.isEmpty) {
+      return Center(child: Text('No systems map available'));
+    }
+
+    if (_systemsMapUrl!.startsWith('http')) {
+      // It's a URL, load it as a network image
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: InteractiveViewer(
+          boundaryMargin: EdgeInsets.all(20),
+          minScale: 0.5,
+          maxScale: 3,
+          child: Image.network(
+            _systemsMapUrl!,
+            fit: BoxFit.contain,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Center(child: CircularProgressIndicator());
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return Center(child: Text('Error loading image'));
+            },
+          ),
+        ),
+      );
+    } else {
+      // Assume it's a base64 encoded image
+      try {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: InteractiveViewer(
+            boundaryMargin: EdgeInsets.all(20),
+            minScale: 0.5,
+            maxScale: 3,
+            child: Image.memory(
+              base64Decode(_systemsMapUrl!.split(',').last),
+              fit: BoxFit.contain,
+            ),
+          ),
+        );
+      } catch (e) {
+        return Center(child: Text('Error decoding image'));
+      }
+    }
   }
 }
 
