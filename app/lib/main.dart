@@ -393,15 +393,7 @@ class _HomePageState extends State<HomePage> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 8),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: _buildSystemsMapContent(),
-              ),
-            ),
+            _buildSystemsMapContent(), // Use the new method here
           ],
         ),
       ),
@@ -409,93 +401,104 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildSystemsMapContent() {
-    if (_systemsMapUrl == null || _systemsMapUrl!.isEmpty) {
-      return Center(child: Text('No systems map available'));
-    }
+    return SizedBox(
+      width: double.infinity, // Takes full width of parent
+      height: 300, // Fixed height, adjust as needed
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          if (_systemsMapUrl == null || _systemsMapUrl!.isEmpty) {
+            return Center(child: Text('No systems map available'));
+          }
 
-    Widget imageWidget;
-    if (_systemsMapUrl!.startsWith('http')) {
-      // It's a URL, load it as a network image
-      imageWidget = Image.network(
-        _systemsMapUrl!,
-        fit: BoxFit.contain,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return Center(child: CircularProgressIndicator());
-        },
-        errorBuilder: (context, error, stackTrace) {
-          return Center(child: Text('Error loading image'));
-        },
-      );
-    } else {
-      // Assume it's a base64 encoded image
-      try {
-        Uint8List bytes = base64Decode(_systemsMapUrl!.split(',').last);
-        imageWidget = Image.memory(
-          bytes,
-          fit: BoxFit.contain,
-        );
-      } catch (e) {
-        return Center(child: Text('Error decoding image'));
-      }
-    }
+          Widget imageWidget;
+          if (_systemsMapUrl!.startsWith('http')) {
+            // It's a URL, load it as a network image
+            imageWidget = Image.network(
+              _systemsMapUrl!,
+              fit: BoxFit.contain,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Center(child: CircularProgressIndicator());
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return Center(child: Text('Error loading image'));
+              },
+            );
+          } else {
+            // Assume it's a base64 encoded image
+            try {
+              Uint8List bytes = base64Decode(_systemsMapUrl!.split(',').last);
+              imageWidget = Image.memory(
+                bytes,
+                fit: BoxFit.contain,
+              );
+            } catch (e) {
+              return Center(child: Text('Error decoding image'));
+            }
+          }
 
-    return Stack(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: InteractiveViewer(
-            transformationController: _transformationController,
-            boundaryMargin: EdgeInsets.all(20),
-            minScale: 0.5,
-            maxScale: 4.0,
-            onInteractionEnd: (ScaleEndDetails endDetails) {
-              _currentScale =
-                  _transformationController.value.getMaxScaleOnAxis();
-            },
-            child: imageWidget,
-          ),
-        ),
-        Positioned(
-          bottom: 16,
-          right: 16,
-          child: Column(
+          return Stack(
             children: [
-              FloatingActionButton(
-                heroTag: 'zoomIn',
-                child: Icon(Icons.zoom_in),
-                onPressed: () {
-                  setState(() {
-                    _currentScale = _currentScale.clamp(0.5, 4.0);
-                    _currentScale += 0.5;
-                    _transformationController.value = Matrix4.identity()
-                      ..scale(_currentScale);
-                  });
-                },
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: InteractiveViewer(
+                  transformationController: _transformationController,
+                  boundaryMargin: EdgeInsets.all(20),
+                  minScale: 0.5,
+                  maxScale: 4.0,
+                  onInteractionEnd: (ScaleEndDetails endDetails) {
+                    _currentScale =
+                        _transformationController.value.getMaxScaleOnAxis();
+                  },
+                  child: imageWidget,
+                ),
               ),
-              SizedBox(height: 8),
-              FloatingActionButton(
-                heroTag: 'zoomOut',
-                child: Icon(Icons.zoom_out),
-                onPressed: () {
-                  setState(() {
-                    _currentScale = _currentScale.clamp(0.5, 4.0);
-                    _currentScale -= 0.5;
-                    _transformationController.value = Matrix4.identity()
-                      ..scale(_currentScale);
-                  });
-                },
-              ),
-              SizedBox(height: 8),
-              FloatingActionButton(
-                heroTag: 'download',
-                child: Icon(Icons.download),
-                onPressed: () => _downloadImage(),
+              Positioned(
+                bottom: 16,
+                right: 16,
+                child: Column(
+                  children: [
+                    FloatingActionButton(
+                      heroTag: 'zoomIn',
+                      mini: true, // Makes the button smaller
+                      child: Icon(Icons.zoom_in),
+                      onPressed: () {
+                        setState(() {
+                          _currentScale = _currentScale.clamp(0.5, 4.0);
+                          _currentScale += 0.5;
+                          _transformationController.value = Matrix4.identity()
+                            ..scale(_currentScale);
+                        });
+                      },
+                    ),
+                    SizedBox(height: 8),
+                    FloatingActionButton(
+                      heroTag: 'zoomOut',
+                      mini: true, // Makes the button smaller
+                      child: Icon(Icons.zoom_out),
+                      onPressed: () {
+                        setState(() {
+                          _currentScale = _currentScale.clamp(0.5, 4.0);
+                          _currentScale -= 0.5;
+                          _transformationController.value = Matrix4.identity()
+                            ..scale(_currentScale);
+                        });
+                      },
+                    ),
+                    SizedBox(height: 8),
+                    FloatingActionButton(
+                      heroTag: 'download',
+                      mini: true, // Makes the button smaller
+                      child: Icon(Icons.download),
+                      onPressed: () => _downloadImage(),
+                    ),
+                  ],
+                ),
               ),
             ],
-          ),
-        ),
-      ],
+          );
+        },
+      ),
     );
   }
 
