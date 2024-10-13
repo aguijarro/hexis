@@ -139,7 +139,8 @@ async def start_conversation():
 @app.post("/analyze")
 async def analyze_question(
     question: Question,
-    qa_chain = Depends(get_qa_chain)
+    qa_chain = Depends(get_qa_chain),
+    vector_store: Chroma = Depends(get_vector_store)
 ):
     try:
         logger.info(f"Received question: {question.query}")
@@ -153,9 +154,14 @@ async def analyze_question(
         
         conversation.messages.append({"role": "user", "content": question.query})
         
+        # Retrieve relevant documents from the vector store
+        relevant_docs = vector_store.similarity_search(question.query, k=5)
+        context = "\n".join([doc.page_content for doc in relevant_docs])
+        
         result = qa_chain.invoke({
             "question_or_context": question.query,
-            "chat_history": [f"{m['role']}: {m['content']}" for m in conversation.messages[:-1]]
+            "chat_history": [f"{m['role']}: {m['content']}" for m in conversation.messages[:-1]],
+            "context": context
         })
         
         conversation.messages.append({"role": "assistant", "content": result})
