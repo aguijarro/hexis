@@ -106,8 +106,17 @@ def get_qa_chain(
     )
     
     prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content="You are a systems thinking expert."),
-        HumanMessagePromptTemplate.from_template(ANALYSIS_TEMPLATE)
+        SystemMessage(content="You are a helpful AI assistant."),
+        HumanMessagePromptTemplate.from_template("""
+        Use the following pieces of context to answer the question at the end. 
+        If you don't know the answer, just say that you don't know, don't try to make up an answer.
+
+        Context: {context}
+        
+        Chat History: {chat_history}
+
+        Human: {question_or_context}
+        AI Assistant:""")
     ])
     
     retriever = vector_store.as_retriever()
