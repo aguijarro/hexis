@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'dart:typed_data';
+import 'package:image_gallery_saver/image_gallery_saver.dart';
 
 void main() {
   runApp(MyApp());
@@ -35,6 +36,9 @@ class _HomePageState extends State<HomePage> {
   String? _systemsMapUrl;
   final FocusNode _questionFocusNode = FocusNode();
   List<String> _uploadedDocuments = [];
+  final TransformationController _transformationController =
+      TransformationController();
+  double _currentScale = 1.0;
 
   @override
   void initState() {
@@ -409,45 +413,116 @@ class _HomePageState extends State<HomePage> {
       return Center(child: Text('No systems map available'));
     }
 
+    Widget imageWidget;
     if (_systemsMapUrl!.startsWith('http')) {
       // It's a URL, load it as a network image
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: InteractiveViewer(
-          boundaryMargin: EdgeInsets.all(20),
-          minScale: 0.5,
-          maxScale: 3,
-          child: Image.network(
-            _systemsMapUrl!,
-            fit: BoxFit.contain,
-            loadingBuilder: (context, child, loadingProgress) {
-              if (loadingProgress == null) return child;
-              return Center(child: CircularProgressIndicator());
-            },
-            errorBuilder: (context, error, stackTrace) {
-              return Center(child: Text('Error loading image'));
-            },
-          ),
-        ),
+      imageWidget = Image.network(
+        _systemsMapUrl!,
+        fit: BoxFit.contain,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Center(child: CircularProgressIndicator());
+        },
+        errorBuilder: (context, error, stackTrace) {
+          return Center(child: Text('Error loading image'));
+        },
       );
     } else {
       // Assume it's a base64 encoded image
       try {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: InteractiveViewer(
-            boundaryMargin: EdgeInsets.all(20),
-            minScale: 0.5,
-            maxScale: 3,
-            child: Image.memory(
-              base64Decode(_systemsMapUrl!.split(',').last),
-              fit: BoxFit.contain,
-            ),
-          ),
+        Uint8List bytes = base64Decode(_systemsMapUrl!.split(',').last);
+        imageWidget = Image.memory(
+          bytes,
+          fit: BoxFit.contain,
         );
       } catch (e) {
         return Center(child: Text('Error decoding image'));
       }
+    }
+
+    return Stack(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: InteractiveViewer(
+            transformationController: _transformationController,
+            boundaryMargin: EdgeInsets.all(20),
+            minScale: 0.5,
+            maxScale: 4.0,
+            onInteractionEnd: (ScaleEndDetails endDetails) {
+              _currentScale =
+                  _transformationController.value.getMaxScaleOnAxis();
+            },
+            child: imageWidget,
+          ),
+        ),
+        Positioned(
+          bottom: 16,
+          right: 16,
+          child: Column(
+            children: [
+              FloatingActionButton(
+                heroTag: 'zoomIn',
+                child: Icon(Icons.zoom_in),
+                onPressed: () {
+                  setState(() {
+                    _currentScale = _currentScale.clamp(0.5, 4.0);
+                    _currentScale += 0.5;
+                    _transformationController.value = Matrix4.identity()
+                      ..scale(_currentScale);
+                  });
+                },
+              ),
+              SizedBox(height: 8),
+              FloatingActionButton(
+                heroTag: 'zoomOut',
+                child: Icon(Icons.zoom_out),
+                onPressed: () {
+                  setState(() {
+                    _currentScale = _currentScale.clamp(0.5, 4.0);
+                    _currentScale -= 0.5;
+                    _transformationController.value = Matrix4.identity()
+                      ..scale(_currentScale);
+                  });
+                },
+              ),
+              SizedBox(height: 8),
+              FloatingActionButton(
+                heroTag: 'download',
+                child: Icon(Icons.download),
+                onPressed: () => _downloadImage(),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _downloadImage() async {
+    try {
+      Uint8List? imageBytes;
+      if (_systemsMapUrl!.startsWith('http')) {
+        final response = await http.get(Uri.parse(_systemsMapUrl!));
+        imageBytes = response.bodyBytes;
+      } else {
+        imageBytes = base64Decode(_systemsMapUrl!.split(',').last);
+      }
+
+      if (imageBytes != null) {
+        final result = await ImageGallerySaver.saveImage(imageBytes);
+        if (result['isSuccess']) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Image saved to gallery')),
+          );
+        } else {
+          throw Exception('Failed to save image');
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error saving image: $e')),
+      );
     }
   }
 }
