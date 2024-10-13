@@ -140,7 +140,8 @@ async def start_conversation():
 async def analyze_question(
     question: Question,
     qa_chain = Depends(get_qa_chain),
-    vector_store: Chroma = Depends(get_vector_store)
+    vector_store: Chroma = Depends(get_vector_store),
+    llm: ChatOpenAI = Depends(get_llm)
 ):
     try:
         logger.info(f"Received question: {question.query}")
@@ -158,10 +159,35 @@ async def analyze_question(
         
         conversation.messages.append({"role": "user", "content": question.query})
         
-        result = qa_chain.invoke({
+        # Create a new prompt that includes instructions to use both context and general knowledge
+        combined_prompt = ChatPromptTemplate.from_messages([
+            SystemMessage(content="""You are a helpful AI assistant with access to both specific context and general knowledge. 
+            First, try to answer the question using the provided context. 
+            If the context doesn't contain enough information, you can use your general knowledge to provide a complete answer. 
+            Always prioritize information from the context when available."""),
+            HumanMessagePromptTemplate.from_template("""
+            Context from documents: {context}
+            
+            Chat History: {chat_history}
+
+            Human: {question_or_context}
+            AI Assistant:""")
+        ])
+        
+        # Create a new chain that uses the combined prompt
+        combined_chain = (
+            {
+                "context": lambda x: context,
+                "chat_history": lambda x: "\n".join([f"{m['role']}: {m['content']}" for m in conversation.messages[:-1]]),
+                "question_or_context": lambda x: x["question_or_context"]
+            }
+            | combined_prompt
+            | llm
+            | StrOutputParser()
+        )
+        
+        result = combined_chain.invoke({
             "question_or_context": question.query,
-            "chat_history": [f"{m['role']}: {m['content']}" for m in conversation.messages[:-1]],
-            "context": context  # Pass the newly retrieved context
         })
         
         conversation.messages.append({"role": "assistant", "content": result})
