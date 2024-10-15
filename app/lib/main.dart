@@ -78,18 +78,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _analyzeQuestion() async {
-    setState(() => _isAnalyzing = true);
     try {
-      if (_conversationId == null) {
-        await _startConversation();
-      }
-
       final response = await http.post(
         Uri.parse('http://localhost:8000/analyze'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'query': _questionController.text,
           'conversation_id': _conversationId,
@@ -104,18 +96,14 @@ class _HomePageState extends State<HomePage> {
               List<Map<String, dynamic>>.from(result['conversation']);
           _questionController.clear();
         });
-
-        // Remove the call to _generateSystemsMap()
-        // await _generateSystemsMap();
       } else {
         throw Exception('Failed to analyze question: ${response.statusCode}');
       }
     } catch (e) {
+      print('Error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
-    } finally {
-      setState(() => _isAnalyzing = false);
     }
   }
 
@@ -180,21 +168,19 @@ class _HomePageState extends State<HomePage> {
           'Content-Type': 'application/json',
         },
         body: json.encode({
-          'elements': ['Element 1', 'Element 2', 'Element 3'],
-          'relationships': [
-            {
-              'source': 'Element 1',
-              'target': 'Element 2',
-              'type': 'influences'
-            },
-            {'source': 'Element 2', 'target': 'Element 3', 'type': 'affects'},
-          ],
+          'query': _questionController.text,
+          'conversation_id': _conversationId,
         }),
       );
 
       if (response.statusCode == 200) {
+        final result = json.decode(response.body);
         setState(() {
-          _systemsMapUrl = 'http://localhost:8000/systems-map';
+          if (result['plot_required']) {
+            // If a plot is required, update the systems map URL
+            _systemsMapUrl = result['plot_url'];
+          }
+          // If no plot is required, keep the existing map (do nothing)
         });
       } else {
         throw Exception(

@@ -190,6 +190,10 @@ async def analyze_question(
             "question_or_context": question.query,
         })
         
+        # Ensure result is a string
+        if not isinstance(result, str):
+            result = str(result)
+        
         conversation.messages.append({"role": "assistant", "content": result})
         
         logger.info("Analysis completed successfully")
