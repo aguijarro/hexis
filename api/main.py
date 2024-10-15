@@ -1,18 +1,9 @@
-import io
-import os
-import re
-import ast
-import json
-import uuid
-import base64
 import logging
-import uvicorn
-import networkx as nx
-import matplotlib.pyplot as plt
 from fastapi import FastAPI, HTTPException, UploadFile, File, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Union  # Add Union here
+import uvicorn
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_chroma import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -21,14 +12,22 @@ from langchain.schema.runnable import RunnablePassthrough, RunnableLambda
 from langchain.schema.output_parser import StrOutputParser
 from langchain.schema import SystemMessage, AIMessage
 from langchain.memory import ConversationBufferMemory
+import networkx as nx
+import matplotlib.pyplot as plt
+import io
+import json
+import os
 from dotenv import load_dotenv
 from fastapi.responses import StreamingResponse
 from functools import lru_cache
+import uuid
 from fastapi.responses import JSONResponse
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from typing import List
-
+import base64
+import re  # Add this line
+import ast
 
 # Load environment variables from .env file
 load_dotenv()
@@ -52,35 +51,16 @@ class Question(BaseModel):
     query: str
     conversation_id: str
 
-
-class Conversation(BaseModel):
-    id: str
-    messages: List[Dict[str, str]]
-
-
 class SystemsAnalysis(BaseModel):
     elements: List[str]
     relationships: List[Dict[str, str]]
     query: str
-
 
 class Settings:
     def __init__(self):
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         if not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
-
-
-class RelationshipInfo(BaseModel):
-    source: str = Field(description="Source node of the relationship")
-    target: str = Field(description="Target node of the relationship")
-    strength: float = Field(description="Strength of the relationship, between 0 and 1")
-
-
-class SystemsAnalysis(BaseModel):
-    nodes: List[str] = Field(description="List of all nodes in the system")
-    relationships: List[RelationshipInfo] = Field(description="List of relationships between nodes")
-
 
 @lru_cache()
 def get_settings():
@@ -98,6 +78,7 @@ def get_llm(settings: Settings = Depends(get_settings)):
         temperature=0.7,
         openai_api_key=settings.openai_api_key
     )
+
 
 def get_qa_chain(
     vector_store: Chroma = Depends(get_vector_store),
@@ -141,63 +122,174 @@ def get_qa_chain(
     
     return chain
 
+class Conversation(BaseModel):
+    id: str
+    messages: List[Dict[str, str]]
 
-def generate_plot(plot_type: str, plot_data: Any) -> str:
-    plt.figure(figsize=(10, 6))
-    
-    plot_functions = {
-        'scatter': plot_scatter,
-        'line': plot_line,
-        'bar': plot_bar
-    }
-    
-    if plot_type in plot_functions:
-        plot_functions[plot_type](plot_data)
-    else:
-        logger.warning(f"Unsupported plot type: {plot_type}")
-        return None
+conversations = {}
 
-    plt.title("Generated Plot")
-    plt.xlabel("X-axis")
-    plt.ylabel("Y-axis")
-    
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
-    buf.seek(0)
-    plot_url = f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}"
-    plt.close()
-    
-    return plot_url
+@app.options("/analyze")
+async def analyze_options():
+    return {"message": "OK"}
 
-def plot_scatter(data):
-    if isinstance(data, list):
-        if all(isinstance(item, (int, float)) for item in data):
-            plt.scatter(range(len(data)), data)
-        elif len(data) == 2 and all(isinstance(sublist, list) for sublist in data):
-            plt.scatter(data[0], data[1])
+@app.post("/start_conversation")
+async def start_conversation():
+    conversation_id = str(len(conversations) + 1)
+    conversations[conversation_id] = Conversation(id=conversation_id, messages=[])
+    return {"conversation_id": conversation_id}
+
+import matplotlib.pyplot as plt
+import io
+import base64
+
+@app.post("/analyze")
+async def analyze_question(
+    question: Question,
+    qa_chain = Depends(get_qa_chain),
+    vector_store: Chroma = Depends(get_vector_store),
+    llm: ChatOpenAI = Depends(get_llm)
+):
+    try:
+        logger.info(f"Received question: {question.query}")
+        logger.info(f"Conversation ID: {question.conversation_id}")
+        
+        if question.conversation_id not in conversations:
+            logger.info(f"Creating new conversation with ID: {question.conversation_id}")
+            conversations[question.conversation_id] = Conversation(id=question.conversation_id, messages=[])
+        
+        conversation = conversations[question.conversation_id]
+        
+        # Retrieve relevant documents from the vector store for each question
+        relevant_docs = vector_store.similarity_search(question.query, k=5)
+        context = "\n".join([doc.page_content for doc in relevant_docs])
+        
+        conversation.messages.append({"role": "user", "content": question.query})
+        
+        # Create a new prompt that includes instructions to use both context and general knowledge
+        combined_prompt = ChatPromptTemplate.from_messages([
+            SystemMessage(content="""You are a helpful AI assistant with access to both specific context and general knowledge. 
+            First, try to answer the question using the provided context. 
+            If the context doesn't contain enough information, you can use your general knowledge to provide a complete answer. 
+            Always prioritize information from the context when available.
+            If the question asks for a plot or graph, include in your response a section starting with 'PLOT:' and ending with 'END_PLOT'.
+            In this section, describe the type of plot (e.g., line, bar, scatter) and provide the data for the plot in one of these formats:
+            1. A Python dictionary with keys as x-values and values as y-values.
+            2. A list of two lists, where the first list contains x-values and the second list contains y-values.
+            3. A single list of y-values (x-values will be automatically generated).
+            For scatter plots, prefer format 2 or 3.
+            Example: PLOT:type: scatter
+            [[1, 2, 3, 4, 5], [2, 4, 6, 8, 10]]
+            END_PLOT"""),
+            HumanMessagePromptTemplate.from_template("""
+            Context from documents: {context}
+            
+            Chat History: {chat_history}
+
+            Human: {question_or_context}
+            AI Assistant:""")
+        ])
+        
+        # Create a new chain that uses the combined prompt
+        combined_chain = (
+            {
+                "context": lambda x: context,
+                "chat_history": lambda x: "\n".join([f"{m['role']}: {m['content']}" for m in conversation.messages[:-1]]),
+                "question_or_context": lambda x: x["question_or_context"]
+            }
+            | combined_prompt
+            | llm
+            | StrOutputParser()
+        )
+        
+        result = combined_chain.invoke({
+            "question_or_context": question.query,
+        })
+        
+        # Ensure result is a string
+        if not isinstance(result, str):
+            result = str(result)
+        
+        conversation.messages.append({"role": "assistant", "content": result})
+        
+        # Check if plot is required and extract plot data
+        plot_match = re.search(r'PLOT:(.*?)END_PLOT', result, re.DOTALL)
+        plot_url = None
+        
+        if plot_match:
+            plot_info = plot_match.group(1).strip()
+            plot_type = re.search(r'type:\s*(\w+)', plot_info, re.IGNORECASE)
+            data_match = re.search(r'\{.*\}|\[.*\]', plot_info)
+            
+            if plot_type and data_match:
+                plot_type = plot_type.group(1).lower()
+                plot_data = ast.literal_eval(data_match.group())
+                
+                plt.figure(figsize=(10, 6))
+                
+                if plot_type == 'scatter':
+                    if isinstance(plot_data, list):
+                        if all(isinstance(item, (int, float)) for item in plot_data):
+                            plt.scatter(range(len(plot_data)), plot_data)
+                        elif len(plot_data) == 2 and all(isinstance(sublist, list) for sublist in plot_data):
+                            plt.scatter(plot_data[0], plot_data[1])
+                        else:
+                            logger.warning("Invalid data format for scatter plot")
+                    elif isinstance(plot_data, dict):
+                        plt.scatter(list(plot_data.keys()), list(plot_data.values()))
+                    else:
+                        logger.warning("Invalid data format for scatter plot")
+                elif plot_type == 'line':
+                    if isinstance(plot_data, dict):
+                        plt.plot(list(plot_data.keys()), list(plot_data.values()))
+                    elif isinstance(plot_data, list) and len(plot_data) == 2:
+                        plt.plot(plot_data[0], plot_data[1])
+                    else:
+                        plt.plot(plot_data)
+                elif plot_type == 'bar':
+                    if isinstance(plot_data, dict):
+                        plt.bar(list(plot_data.keys()), list(plot_data.values()))
+                    elif isinstance(plot_data, list) and len(plot_data) == 2:
+                        plt.bar(plot_data[0], plot_data[1])
+                    else:
+                        plt.bar(range(len(plot_data)), plot_data)
+                
+                plt.title("Generated Plot")
+                plt.xlabel("X-axis")
+                plt.ylabel("Y-axis")
+                
+                buf = io.BytesIO()
+                plt.savefig(buf, format='png')
+                buf.seek(0)
+                plot_url = f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}"
+                plt.close()
+                
+                logger.info(f"Plot generated successfully. Type: {plot_type}")
+            else:
+                logger.warning("Plot type or data not found in the response")
         else:
-            logger.warning("Invalid data format for scatter plot")
-    elif isinstance(data, dict):
-        plt.scatter(list(data.keys()), list(data.values()))
-    else:
-        logger.warning("Invalid data format for scatter plot")
+            logger.info("No plot section found in the response")
+        
+        # Remove the PLOT section from the result
+        result = re.sub(r'PLOT:.*?END_PLOT', '', result, flags=re.DOTALL).strip()
+        
+        logger.info("Analysis completed successfully")
+        return {
+            "analysis": result,
+            "conversation": conversation.messages,
+            "plot_url": plot_url
+        }
+    except Exception as e:
+        logger.error(f"Error in analyze_question: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
-def plot_line(data):
-    if isinstance(data, dict):
-        plt.plot(list(data.keys()), list(data.values()))
-    elif isinstance(data, list) and len(data) == 2:
-        plt.plot(data[0], data[1])
-    else:
-        plt.plot(data)
+class RelationshipInfo(BaseModel):
+    source: str = Field(description="Source node of the relationship")
+    target: str = Field(description="Target node of the relationship")
+    strength: float = Field(description="Strength of the relationship, between 0 and 1")
 
-def plot_bar(data):
-    if isinstance(data, dict):
-        plt.bar(list(data.keys()), list(data.values()))
-    elif isinstance(data, list) and len(data) == 2:
-        plt.bar(data[0], data[1])
-    else:
-        plt.bar(range(len(data)), data)
-
+class SystemsAnalysis(BaseModel):
+    nodes: List[str] = Field(description="List of all nodes in the system")
+    relationships: List[RelationshipInfo] = Field(description="List of relationships between nodes")
 
 def get_systems_analysis_chain(
     vector_store: Chroma = Depends(get_vector_store),
@@ -291,126 +383,6 @@ def generate_systems_map(analysis: SystemsAnalysis):
     plt.close()
     
     return plot_base64
-
-
-conversations = {}
-
-
-@app.post("/start_conversation")
-async def start_conversation():
-    conversation_id = str(len(conversations) + 1)
-    conversations[conversation_id] = Conversation(id=conversation_id, messages=[])
-    return {"conversation_id": conversation_id}
-
-
-@app.options("/analyze")
-async def analyze_options():
-    return {"message": "OK"}
-
-@app.post("/analyze")
-async def analyze_question(
-    question: Question,
-    qa_chain = Depends(get_qa_chain),
-    vector_store: Chroma = Depends(get_vector_store),
-    llm: ChatOpenAI = Depends(get_llm)
-) -> Dict[str, Any]:
-    try:
-        logger.info(f"Received question: {question.query}")
-        logger.info(f"Conversation ID: {question.conversation_id}")
-        
-        if question.conversation_id not in conversations:
-            logger.info(f"Creating new conversation with ID: {question.conversation_id}")
-            conversations[question.conversation_id] = Conversation(id=question.conversation_id, messages=[])
-        
-        conversation = conversations[question.conversation_id]
-        
-        # Retrieve relevant documents from the vector store for each question
-        relevant_docs = vector_store.similarity_search(question.query, k=5)
-        context = "\n".join([doc.page_content for doc in relevant_docs])
-        
-        conversation.messages.append({"role": "user", "content": question.query})
-        
-        # Create a new prompt that includes instructions to use both context and general knowledge
-        combined_prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content="""You are a helpful AI assistant with access to both specific context and general knowledge. 
-            First, try to answer the question using the provided context. 
-            If the context doesn't contain enough information, you can use your general knowledge to provide a complete answer. 
-            Always prioritize information from the context when available.
-            If the question asks for a plot or graph, include in your response a section starting with 'PLOT:' and ending with 'END_PLOT'.
-            In this section, describe the type of plot (e.g., line, bar, scatter) and provide the data for the plot in one of these formats:
-            1. A Python dictionary with keys as x-values and values as y-values.
-            2. A list of two lists, where the first list contains x-values and the second list contains y-values.
-            3. A single list of y-values (x-values will be automatically generated).
-            For scatter plots, prefer format 2 or 3.
-            Example: PLOT:type: scatter
-            [[1, 2, 3, 4, 5], [2, 4, 6, 8, 10]]
-            END_PLOT"""),
-            HumanMessagePromptTemplate.from_template("""
-            Context from documents: {context}
-            
-            Chat History: {chat_history}
-
-            Human: {question_or_context}
-            AI Assistant:""")
-        ])
-        
-        # Create a new chain that uses the combined prompt
-        combined_chain = (
-            {
-                "context": lambda x: context,
-                "chat_history": lambda x: "\n".join([f"{m['role']}: {m['content']}" for m in conversation.messages[:-1]]),
-                "question_or_context": lambda x: x["question_or_context"]
-            }
-            | combined_prompt
-            | llm
-            | StrOutputParser()
-        )
-        
-        result = combined_chain.invoke({
-            "question_or_context": question.query,
-        })
-        
-        # Ensure result is a string
-        if not isinstance(result, str):
-            result = str(result)
-        
-        conversation.messages.append({"role": "assistant", "content": result})
-        
-        plot_url = None
-        plot_match = re.search(r'PLOT:(.*?)END_PLOT', result, re.DOTALL)
-        
-        if plot_match:
-            plot_info = plot_match.group(1).strip()
-            plot_type_match = re.search(r'type:\s*(\w+)', plot_info, re.IGNORECASE)
-            data_match = re.search(r'\{.*\}|\[.*\]', plot_info)
-            
-            if plot_type_match and data_match:
-                plot_type = plot_type_match.group(1).lower()
-                plot_data = ast.literal_eval(data_match.group())
-                plot_url = generate_plot(plot_type, plot_data)
-                
-                if plot_url:
-                    logger.info(f"Plot generated successfully. Type: {plot_type}")
-                else:
-                    logger.warning("Failed to generate plot")
-            else:
-                logger.warning("Plot type or data not found in the response")
-        else:
-            logger.info("No plot section found in the response")
-        
-        # Remove the PLOT section from the result
-        result = re.sub(r'PLOT:.*?END_PLOT', '', result, flags=re.DOTALL).strip()
-        
-        logger.info("Analysis completed successfully")
-        return {
-            "analysis": result,
-            "conversation": conversation.messages,
-            "plot_url": plot_url
-        }
-    except Exception as e:
-        logger.error(f"Error in analyze_question: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/upload-documents")
 async def upload_documents(
