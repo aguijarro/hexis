@@ -1,9 +1,20 @@
+import ast
+import base64
+import io
+import json
 import logging
+import matplotlib.pyplot as plt
+import networkx as nx
+import os
+import re
+import uuid
+import uvicorn
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile, File, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Union  # Add Union here
-import uvicorn
+from fastapi.responses import StreamingResponse, JSONResponse
+from functools import lru_cache
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_chroma import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -11,23 +22,10 @@ from langchain.prompts import ChatPromptTemplate, HumanMessagePromptTemplate, Pr
 from langchain.schema.runnable import RunnablePassthrough, RunnableLambda
 from langchain.schema.output_parser import StrOutputParser
 from langchain.schema import SystemMessage, AIMessage
-from langchain.memory import ConversationBufferMemory
-import networkx as nx
-import matplotlib.pyplot as plt
-import io
-import json
-import os
-from dotenv import load_dotenv
-from fastapi.responses import StreamingResponse
-from functools import lru_cache
-import uuid
-from fastapi.responses import JSONResponse
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
-from typing import List
-import base64
-import re  # Add this line
-import ast
+from typing import List, Dict
+
 
 # Load environment variables from .env file
 load_dotenv()
