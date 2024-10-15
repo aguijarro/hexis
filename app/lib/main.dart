@@ -95,6 +95,16 @@ class _HomePageState extends State<HomePage> {
           _conversation =
               List<Map<String, dynamic>>.from(result['conversation']);
           _questionController.clear();
+
+          // Update the systems map URL if a plot is provided
+          if (result['plot_url'] != null) {
+            _systemsMapUrl = result['plot_url'];
+            print(
+                "Plot URL updated: $_systemsMapUrl"); // Add this line for debugging
+          } else {
+            print(
+                "No plot URL provided in the response"); // Add this line for debugging
+          }
         });
       } else {
         throw Exception('Failed to analyze question: ${response.statusCode}');

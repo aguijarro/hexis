@@ -26,6 +26,8 @@ from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from typing import List
 import base64
+import re  # Add this line
+import ast
 
 # Load environment variables from .env file
 load_dotenv()
@@ -136,6 +138,10 @@ async def start_conversation():
     conversations[conversation_id] = Conversation(id=conversation_id, messages=[])
     return {"conversation_id": conversation_id}
 
+import matplotlib.pyplot as plt
+import io
+import base64
+
 @app.post("/analyze")
 async def analyze_question(
     question: Question,
@@ -164,7 +170,16 @@ async def analyze_question(
             SystemMessage(content="""You are a helpful AI assistant with access to both specific context and general knowledge. 
             First, try to answer the question using the provided context. 
             If the context doesn't contain enough information, you can use your general knowledge to provide a complete answer. 
-            Always prioritize information from the context when available."""),
+            Always prioritize information from the context when available.
+            If the question asks for a plot or graph, include in your response a section starting with 'PLOT:' and ending with 'END_PLOT'.
+            In this section, describe the type of plot (e.g., line, bar, scatter) and provide the data for the plot in one of these formats:
+            1. A Python dictionary with keys as x-values and values as y-values.
+            2. A list of two lists, where the first list contains x-values and the second list contains y-values.
+            3. A single list of y-values (x-values will be automatically generated).
+            For scatter plots, prefer format 2 or 3.
+            Example: PLOT:type: scatter
+            [[1, 2, 3, 4, 5], [2, 4, 6, 8, 10]]
+            END_PLOT"""),
             HumanMessagePromptTemplate.from_template("""
             Context from documents: {context}
             
@@ -196,8 +211,73 @@ async def analyze_question(
         
         conversation.messages.append({"role": "assistant", "content": result})
         
+        # Check if plot is required and extract plot data
+        plot_match = re.search(r'PLOT:(.*?)END_PLOT', result, re.DOTALL)
+        plot_url = None
+        
+        if plot_match:
+            plot_info = plot_match.group(1).strip()
+            plot_type = re.search(r'type:\s*(\w+)', plot_info, re.IGNORECASE)
+            data_match = re.search(r'\{.*\}|\[.*\]', plot_info)
+            
+            if plot_type and data_match:
+                plot_type = plot_type.group(1).lower()
+                plot_data = ast.literal_eval(data_match.group())
+                
+                plt.figure(figsize=(10, 6))
+                
+                if plot_type == 'scatter':
+                    if isinstance(plot_data, list):
+                        if all(isinstance(item, (int, float)) for item in plot_data):
+                            plt.scatter(range(len(plot_data)), plot_data)
+                        elif len(plot_data) == 2 and all(isinstance(sublist, list) for sublist in plot_data):
+                            plt.scatter(plot_data[0], plot_data[1])
+                        else:
+                            logger.warning("Invalid data format for scatter plot")
+                    elif isinstance(plot_data, dict):
+                        plt.scatter(list(plot_data.keys()), list(plot_data.values()))
+                    else:
+                        logger.warning("Invalid data format for scatter plot")
+                elif plot_type == 'line':
+                    if isinstance(plot_data, dict):
+                        plt.plot(list(plot_data.keys()), list(plot_data.values()))
+                    elif isinstance(plot_data, list) and len(plot_data) == 2:
+                        plt.plot(plot_data[0], plot_data[1])
+                    else:
+                        plt.plot(plot_data)
+                elif plot_type == 'bar':
+                    if isinstance(plot_data, dict):
+                        plt.bar(list(plot_data.keys()), list(plot_data.values()))
+                    elif isinstance(plot_data, list) and len(plot_data) == 2:
+                        plt.bar(plot_data[0], plot_data[1])
+                    else:
+                        plt.bar(range(len(plot_data)), plot_data)
+                
+                plt.title("Generated Plot")
+                plt.xlabel("X-axis")
+                plt.ylabel("Y-axis")
+                
+                buf = io.BytesIO()
+                plt.savefig(buf, format='png')
+                buf.seek(0)
+                plot_url = f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}"
+                plt.close()
+                
+                logger.info(f"Plot generated successfully. Type: {plot_type}")
+            else:
+                logger.warning("Plot type or data not found in the response")
+        else:
+            logger.info("No plot section found in the response")
+        
+        # Remove the PLOT section from the result
+        result = re.sub(r'PLOT:.*?END_PLOT', '', result, flags=re.DOTALL).strip()
+        
         logger.info("Analysis completed successfully")
-        return {"analysis": result, "conversation": conversation.messages}
+        return {
+            "analysis": result,
+            "conversation": conversation.messages,
+            "plot_url": plot_url
+        }
     except Exception as e:
         logger.error(f"Error in analyze_question: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
